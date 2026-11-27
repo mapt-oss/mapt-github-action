@@ -1,0 +1,3 @@
+# mapt state and connection details when running the action locally
+.mapt/
+snc-conn-details/

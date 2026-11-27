@@ -1,0 +1,46 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "schedule:weekly"
+  ],
+  "customManagers": [
+    {
+      "description": "mapt OCI image tag referenced by the actions",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "(^|/)action\\.yml$",
+        "(^|/)run\\.sh$",
+        "(^|/)run-tests\\.sh$",
+        "(^|/)README\\.md$"
+      ],
+      "matchStrings": [
+        "quay\\.io/redhat-developer/mapt:(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+)[^0-9A-Za-z_-]"
+      ],
+      "datasourceTemplate": "docker",
+      "packageNameTemplate": "quay.io/redhat-developer/mapt",
+      "allowedVersions": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "mapt image: keep the action default, run.sh fallback and guard, README and test assertions in one update",
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["quay.io/redhat-developer/mapt"],
+      "groupName": "mapt image"
+    },
+    {
+      "description": "mapt image: remind to drop the vpc-id guard once the pin passes a release shipping --vpc-id",
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["quay.io/redhat-developer/mapt"],
+      "prBodyNotes": ["After bumping past a mapt release that ships `--vpc-id`, remove the vpc-id guard in `ibmcloud-snc/run.sh` (search for the TODO)."]
+    },
+    {
+      "description": "mapt image: major upgrades need approval from the dependency dashboard",
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["quay.io/redhat-developer/mapt"],
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    }
+  ]
+}

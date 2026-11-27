@@ -1,0 +1,171 @@
+name: 'OpenShift SNC on IBM Cloud'
+description: 'Create or destroy a single-node OpenShift (SNC) cluster on IBM Cloud using mapt'
+inputs:
+  operation:
+    description: 'Operation to execute: create or destroy.'
+    required: false
+    default: 'create'
+  project-name:
+    description: 'mapt project name identifying the stack. For destroy it must match the name used at create time. Defaults to a name unique per job execution but stable within the job, so create and destroy agree.'
+    required: false
+    default: ''
+  region:
+    description: 'IBM Cloud region (IC_REGION), e.g. us-south or eu-de. Can also be set with the IC_REGION environment variable.'
+    required: false
+    default: ''
+  zone:
+    description: 'IBM Cloud availability zone (IC_ZONE), e.g. us-south-1. Required for create. Can also be set with the IC_ZONE environment variable.'
+    required: false
+    default: ''
+  pull-secret:
+    description: 'OpenShift pull secret content (download from https://console.redhat.com/openshift/create/local). Required for create unless pull-secret-file is set. Written to a temporary file that is removed when the step ends.'
+    required: false
+    default: ''
+  pull-secret-file:
+    description: 'Path on the runner to a file holding the OpenShift pull secret. Alternative to pull-secret.'
+    required: false
+    default: ''
+  version:
+    description: 'OpenShift version used to select the SNC catalog image (e.g. 4.22.14). Empty selects the latest version available in the catalog.'
+    required: false
+    default: ''
+  vpc-id:
+    description: 'ID of an existing VPC to reuse. mapt then only creates a new subnet inside it. Requires a mapt image newer than v0.14.7 (the flag is on mapt main only): also set mapt-image accordingly.'
+    required: false
+    default: ''
+  cpus:
+    description: 'Minimum number of CPUs for the instance. Ignored when compute-sizes is set. Some profiles raise this value (ai requires at least 16).'
+    required: false
+    default: '8'
+  memory:
+    description: 'Amount of RAM for the instance in GiB. Ignored when compute-sizes is set.'
+    required: false
+    default: '64'
+  gpus:
+    description: 'Number of GPUs for the instance. Ignored when compute-sizes is set.'
+    required: false
+    default: '0'
+  gpu-manufacturer:
+    description: 'GPU manufacturer, e.g. NVIDIA.'
+    required: false
+    default: ''
+  nested-virt:
+    description: 'Request nested virtualization. mapt then selects a bare metal server, because IBM Cloud VPC supplies the KVM device on bare metal only. Mutually exclusive with spot. true or false.'
+    required: false
+    default: 'false'
+  compute-sizes:
+    description: 'Comma-separated list of IBM Cloud compute profiles (e.g. bx2-16x64). The first value takes precedence over cpus, memory and gpus.'
+    required: false
+    default: ''
+  compute-families:
+    description: 'Comma-separated allowlist of IBM Cloud compute family prefixes (e.g. bx2,cx2). Only used when compute-sizes is not set.'
+    required: false
+    default: ''
+  disk-size:
+    description: 'Disk size in GB for the instance. Ignored for bare metal servers (they boot from local disks).'
+    required: false
+    default: '200'
+  spot:
+    description: 'Request a spot virtual server instance. Spot instances may be preempted by IBM Cloud. Mutually exclusive with nested-virt. true or false.'
+    required: false
+    default: 'false'
+  profile:
+    description: 'Comma-separated list of profiles to install on the cluster: virtualization, serverless-serving, serverless-eventing, serverless, servicemesh, ai, nvidia.'
+    required: false
+    default: ''
+  operator-channel:
+    description: 'Comma-separated operator channel overrides in the form package=channel (e.g. serverless-operator=preview,nfd=4.17).'
+    required: false
+    default: ''
+  catalog-source:
+    description: 'Comma-separated catalog source overrides in the form package=index-image (e.g. serverless-operator=quay.io/my-org/my-index:latest).'
+    required: false
+    default: ''
+  disable-cluster-readiness:
+    description: 'Skip the cluster readiness checks. The kubeconfig cannot be generated when set. true or false.'
+    required: false
+    default: 'false'
+  tags:
+    description: 'Tags to add on each resource created on IBM Cloud (name1=value1,name2=value2).'
+    required: false
+    default: ''
+  backed-url:
+    description: 'mapt state backend. Empty keeps the state on the runner for the job lifetime, which is enough to create and destroy within one job. cos://bucket and s3://bucket both address an IBM Cloud Object Storage bucket (requires the IBMCLOUD_COS_* environment variables). azblob:// is not supported by the mapt ibmcloud provider.'
+    required: false
+    default: ''
+  conn-details-output:
+    description: 'Directory, relative to the workspace, where connection details (host, username, id_rsa, kubeconfig, kubeadmin_pass) are written on create. Files are owned by the runner user; keys are mode 600.'
+    required: false
+    default: 'snc-conn-details'
+  mapt-image:
+    description: 'Container image holding the mapt binary. Pinned to the latest mapt release for reproducibility; override to test newer builds.'
+    required: false
+    default: 'quay.io/redhat-developer/mapt:v0.14.7'
+  debug:
+    description: 'Enable mapt debug traces. Warning: debug output exposes partially masked credentials. true or false.'
+    required: false
+    default: 'false'
+  force-destroy:
+    description: 'Destroy even when the stack state is locked (destroy only). true or false.'
+    required: false
+    default: 'false'
+  keep-state:
+    description: 'Keep the state files after a successful destroy (destroy only). true or false.'
+    required: false
+    default: 'false'
+outputs:
+  host:
+    description: 'Floating IP of the instance (create only).'
+    value: ${{ steps.mapt.outputs.host }}
+  username:
+    description: 'SSH username for the instance, core (create only).'
+    value: ${{ steps.mapt.outputs.username }}
+  id-rsa:
+    description: 'Path on the runner to the private key of the instance (create only).'
+    value: ${{ steps.mapt.outputs.id-rsa }}
+  kubeconfig:
+    description: 'Path on the runner to the kubeconfig of the cluster (create only; empty when disable-cluster-readiness is true).'
+    value: ${{ steps.mapt.outputs.kubeconfig }}
+  conn-details:
+    description: 'Directory on the runner holding the connection details files (create only).'
+    value: ${{ steps.mapt.outputs.conn-details }}
+  project-name:
+    description: 'mapt project name used for the stack, exported before provisioning starts so a failed create can still be destroyed. Pass it back on destroy.'
+    value: ${{ steps.mapt.outputs.project-name }}
+runs:
+  using: composite
+  steps:
+    - name: Run mapt
+      id: mapt
+      shell: bash
+      env:
+        OPERATION: ${{ inputs.operation }}
+        PROJECT_NAME_INPUT: ${{ inputs.project-name }}
+        REGION_INPUT: ${{ inputs.region }}
+        ZONE_INPUT: ${{ inputs.zone }}
+        PULL_SECRET: ${{ inputs.pull-secret }}
+        PULL_SECRET_FILE: ${{ inputs.pull-secret-file }}
+        VERSION: ${{ inputs.version }}
+        VPC_ID: ${{ inputs.vpc-id }}
+        CPUS: ${{ inputs.cpus }}
+        MEMORY: ${{ inputs.memory }}
+        GPUS: ${{ inputs.gpus }}
+        GPU_MANUFACTURER: ${{ inputs.gpu-manufacturer }}
+        NESTED_VIRT: ${{ inputs.nested-virt }}
+        COMPUTE_SIZES: ${{ inputs.compute-sizes }}
+        COMPUTE_FAMILIES: ${{ inputs.compute-families }}
+        DISK_SIZE: ${{ inputs.disk-size }}
+        SPOT: ${{ inputs.spot }}
+        PROFILE: ${{ inputs.profile }}
+        OPERATOR_CHANNEL: ${{ inputs.operator-channel }}
+        CATALOG_SOURCE: ${{ inputs.catalog-source }}
+        DISABLE_CLUSTER_READINESS: ${{ inputs.disable-cluster-readiness }}
+        TAGS: ${{ inputs.tags }}
+        BACKED_URL_INPUT: ${{ inputs.backed-url }}
+        CONN_DETAILS_OUTPUT: ${{ inputs.conn-details-output }}
+        MAPT_IMAGE: ${{ inputs.mapt-image }}
+        DEBUG: ${{ inputs.debug }}
+        FORCE_DESTROY: ${{ inputs.force-destroy }}
+        KEEP_STATE: ${{ inputs.keep-state }}
+      run: |
+        bash "${GITHUB_ACTION_PATH}/run.sh"
