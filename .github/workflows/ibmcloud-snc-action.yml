@@ -1,0 +1,62 @@
+name: ibmcloud-snc-action
+
+on:
+  workflow_dispatch:
+    inputs:
+      region:
+        description: 'IBM Cloud region'
+        required: true
+        default: 'us-south'
+      zone:
+        description: 'IBM Cloud availability zone'
+        required: true
+        default: 'us-south-1'
+      version:
+        description: 'OpenShift version (empty = latest in the catalog)'
+        required: false
+        default: ''
+      spot:
+        description: 'Request a spot instance'
+        required: false
+        default: 'false'
+
+permissions: {}
+
+jobs:
+  snc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Create SNC cluster
+        id: snc
+        uses: ./ibmcloud-snc
+        with:
+          region: ${{ inputs.region }}
+          zone: ${{ inputs.zone }}
+          version: ${{ inputs.version }}
+          spot: ${{ inputs.spot }}
+          pull-secret: ${{ secrets.SNC_PULL_SECRET }}
+        env:
+          IBMCLOUD_API_KEY: ${{ secrets.IBMCLOUD_API_KEY }}
+
+      - name: Smoke test (SSH)
+        if: steps.snc.outcome == 'success'
+        run: |
+          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              -i "${{ steps.snc.outputs.id-rsa }}" \
+              "${{ steps.snc.outputs.username }}@${{ steps.snc.outputs.host }}" \
+              'echo "connected to $(hostname)"'
+          test -s "${{ steps.snc.outputs.kubeconfig }}"
+
+      - name: Destroy SNC cluster
+        if: always()
+        uses: ./ibmcloud-snc
+        with:
+          operation: destroy
+          project-name: ${{ steps.snc.outputs.project-name }}
+          region: ${{ inputs.region }}
+        env:
+          IBMCLOUD_API_KEY: ${{ secrets.IBMCLOUD_API_KEY }}

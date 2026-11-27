@@ -1,0 +1,33 @@
+name: tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: shellcheck
+        run: shellcheck ibmcloud-snc/run.sh ibmcloud-snc/tests/run-tests.sh
+
+      - name: actionlint
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint
+
+      - name: shfmt
+        run: |
+          go install mvdan.cc/sh/v3/cmd/shfmt@v3.14.1
+          "$(go env GOPATH)/bin/shfmt" -d -i 2 -ci ibmcloud-snc/run.sh ibmcloud-snc/tests/run-tests.sh
+
+      - name: Run action unit tests
+        run: bash ibmcloud-snc/tests/run-tests.sh
